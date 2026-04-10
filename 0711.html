@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>專業均線扣抵系統</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+</head>
+
+<body class="bg-gray-100 p-6">
+
+<div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow">
+
+<h1 class="text-3xl font-bold text-center mb-4">🔥 專業均線扣抵分析</h1>
+
+<div class="flex gap-2 mb-4">
+<input id="ticker" value="2330.TW" class="border p-3 w-full rounded text-center text-lg">
+<button onclick="loadStock()" class="bg-blue-600 text-white px-6 rounded">分析</button>
+</div>
+
+<div id="info" class="text-center mb-4 text-lg font-bold"></div>
+
+<div id="trend" class="text-center mb-4 text-xl"></div>
+
+<canvas id="chart" height="120"></canvas>
+
+<div id="table" class="mt-6"></div>
+
+</div>
+
+<script>
+
+let chart;
+
+async function loadStock(){
+
+const ticker = document.getElementById("ticker").value;
+
+const url = `https://api.allorigins.win/raw?url=https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=6mo`;
+
+const res = await fetch(url);
+const data = await res.json();
+
+const result = data.chart.result[0];
+const close = result.indicators.quote[0].close;
+const time = result.timestamp;
+
+let prices = [];
+
+for(let i=0;i<close.length;i++){
+if(close[i] && close[i] > 0){
+prices.push({
+date: dayjs.unix(time[i]).format("MM-DD"),
+close: close[i]
+});
+}
+}
+
+function MA(n){
+return prices.map((d,i)=>{
+if(i<n-1) return null;
+let sum=0;
+for(let j=0;j<n;j++){
+sum+=prices[i-j].close;
+}
+return sum/n;
+});
+}
+
+const ma5 = MA(5);
+const ma10 = MA(10);
+const ma20 = MA(20);
+const ma60 = MA(60);
+
+const last = prices[prices.length-1];
+
+function deduct(n){
+return prices[prices.length-n].close;
+}
+
+const d5 = deduct(5);
+const d10 = deduct(10);
+const d20 = deduct(20);
+const d60 = deduct(60);
+
+function slope(ma){
+let l = ma.length;
+return ma[l-1] > ma[l-2];
+}
+
+const trendText = `
+MA5: ${slope(ma5)?"⬆️":"⬇️"}　
+MA10: ${slope(ma10)?"⬆️":"⬇️"}　
+MA20: ${slope(ma20)?"⬆️":"⬇️"}　
+MA60: ${slope(ma60)?"⬆️":"⬇️"}
+`;
+
+document.getElementById("trend").innerHTML = trendText;
+
+const alignment =
+(ma5.at(-1)>ma10.at(-1) && ma10.at(-1)>ma20.at(-1) && ma20.at(-1)>ma60.at(-1))
+? "🔥 多頭排列"
+:
+(ma5.at(-1)<ma10.at(-1) && ma10.at(-1)<ma20.at(-1) && ma20.at(-1)<ma60.at(-1))
+? "❄️ 空頭排列"
+:
+"⚖️ 盤整";
+
+document.getElementById("info").innerHTML =
+`最新價 ${last.close.toFixed(2)} ｜ ${alignment}`;
+
+document.getElementById("table").innerHTML = `
+<table class="w-full text-center border mt-4">
+<tr class="bg-gray-200">
+<th>均線</th><th>扣抵價</th><th>多空</th>
+</tr>
+<tr><td>MA5</td><td>${d5.toFixed(2)}</td><td>${last.close>d5?"多":"空"}</td></tr>
+<tr><td>MA10</td><td>${d10.toFixed(2)}</td><td>${last.close>d10?"多":"空"}</td></tr>
+<tr><td>MA20</td><td>${d20.toFixed(2)}</td><td>${last.close>d20?"多":"空"}</td></tr>
+<tr><td>MA60</td><td>${d60.toFixed(2)}</td><td>${last.close>d60?"多":"空"}</td></tr>
+</table>
+`;
+
+if(chart) chart.destroy();
+
+chart = new Chart(document.getElementById("chart"),{
+type:"line",
+data:{
+labels:prices.map(d=>d.date),
+datasets:[
+{label:"股價",data:prices.map(d=>d.close)},
+{label:"MA5",data:ma5},
+{label:"MA10",data:ma10},
+{label:"MA20",data:ma20},
+{label:"MA60",data:ma60}
+]
+},
+options:{
+responsive:true,
+plugins:{legend:{position:"bottom"}}
+}
+});
+
+}
+
+</script>
+
+</body>
+</html>
